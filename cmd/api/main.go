@@ -38,7 +38,7 @@ func main() {
 
 	v1 := http.NewServeMux()
 	v1.Handle("/v1/", http.StripPrefix("/v1", app.routes()))
-
+	
 	server := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.port),
 		Handler:      v1,
