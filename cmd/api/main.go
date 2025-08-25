@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"simplewebapi.moviedb/internal/data"
 	"time"
 )
 
@@ -28,12 +29,13 @@ type config struct {
 type application struct {
 	config config
 	logger *log.Logger
+	repos  data.Repo
 }
 
 func main() {
 	var cfg config
 	//default flag value
-	flag.IntVar(&cfg.port, "port", 8000, "API server port")
+	flag.IntVar(&cfg.port, "port", 4000, "API server port")
 	flag.StringVar(&cfg.env, "env", "development", "Environment (development|staging|production)")
 
 	flag.StringVar(&cfg.db.dsn, "db-dsn", os.Getenv("MOVIE_API_DB_DSN"), "PostgreSQL DSN")
@@ -57,6 +59,7 @@ func main() {
 	app := &application{
 		config: cfg,
 		logger: logger,
+		repos:  data.NewRepo(db),
 	}
 
 	v1 := http.NewServeMux()

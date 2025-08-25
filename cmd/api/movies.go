@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"simplewebapi.moviedb/internal/data"
@@ -9,10 +10,10 @@ import (
 )
 
 type MovieInput struct {
-	Title   string       `json:"title"`
-	Year    int32        `json:"year"`
-	Runtime data.Runtime `json:"runtime"`
-	Genres  []string     `json:"genres"`
+	Title   *string       `json:"title"`
+	Year    *int32        `json:"year"`
+	Runtime *data.Runtime `json:"runtime"`
+	Genres  []string      `json:"genres"`
 }
 
 func (app *application) createMovieHandler(w http.ResponseWriter, r *http.Request) {
@@ -25,14 +26,28 @@ func (app *application) createMovieHandler(w http.ResponseWriter, r *http.Reques
 		app.badRequestResponse(w, r, err)
 		return
 	}
+
+	var movie *data.Movie
+	movieMapper(input, movie)
 	v := validator.New()
 
-	if !ValidateMovie(v, &input) {
+	if !ValidateMovie(v, movie) {
 		app.failedValidationResponse(w, r, v.Errors)
 		return
 	}
+	err = app.repos.Movies.Insert(movie)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
 
-	fmt.Fprintf(w, "%+v \n", input)
+	headers := make(http.Header)
+	headers.Set("Location", fmt.Sprintf("/v1/movies/%d", movie.ID))
+
+	err = app.writeJSON(w, http.StatusCreated, envelope{"movie": movie}, headers)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	}
 }
 
 func (app *application) showMovieHandler(w http.ResponseWriter, r *http.Request) {
@@ -41,13 +56,15 @@ func (app *application) showMovieHandler(w http.ResponseWriter, r *http.Request)
 		app.notFoundResponse(w, r)
 		return
 	}
-	movie := data.Movie{
-		ID:        id,
-		CreatedAt: time.Now(),
-		Title:     "Casablanca",
-		Runtime:   102,
-		Genres:    []string{"drama", "romance", "war"},
-		Version:   1,
+	movie, err := app.repos.Movies.Get(id)
+	if err != nil {
+		switch {
+		case errors.Is(err, data.ErrRecordNotFound):
+			app.notFoundResponse(w, r)
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+		return
 	}
 	data := envelope{"movie": movie}
 	err = app.writeJSON(w, http.StatusOK, data, nil)
@@ -56,21 +73,107 @@ func (app *application) showMovieHandler(w http.ResponseWriter, r *http.Request)
 	}
 
 }
+func (app *application) updateMovieHandler(w http.ResponseWriter, r *http.Request) {
+	id, err := app.readIDParam(r)
+	if err != nil {
+		app.notFoundResponse(w, r)
+		return
+	}
+	movie, err := app.repos.Movies.Get(id)
+	if err != nil {
+		switch {
+		case errors.Is(err, data.ErrRecordNotFound):
+			app.notFoundResponse(w, r)
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+		return
+	}
+	var input MovieInput
 
-func ValidateMovie(v *validator.Validator, movieInput *MovieInput) bool {
-	v.Check(movieInput.Title != "", "title", "must not be empty")
-	v.Check(len(movieInput.Title) <= 500, "title", "must not be more than 500 chars long")
+	err = app.readJSON(w, r, &input)
 
-	v.Check(movieInput.Year != 0, "year", "must be provided")
-	v.Check(movieInput.Year >= 1888, "year", "must be greater than 1888")
-	v.Check(movieInput.Year <= int32(time.Now().Year()), "year", "must not be in the future")
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
 
-	v.Check(movieInput.Runtime != 0, "runtime", "must be provided")
-	v.Check(movieInput.Runtime > 0, "runtime", "must be a positive integer")
+	movieMapper(input, movie)
+	v := validator.New()
 
-	v.Check(movieInput.Genres != nil, "genres", "must be provided")
-	v.Check(len(movieInput.Genres) >= 1, "genres", "must contain at least 1 genre")
+	if !ValidateMovie(v, movie) {
+		app.failedValidationResponse(w, r, v.Errors)
+		return
+	}
 
-	v.Check(validator.Unique(movieInput.Genres), "genres", "must not contain duplicate values")
+	err = app.repos.Movies.Update(movie)
+	if err != nil {
+		switch {
+		case errors.Is(err, data.ErrEditConflict):
+			app.editConflictResponse(w, r)
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+		return
+	}
+	
+	err = app.writeJSON(w, http.StatusOK, envelope{"movie": movie}, nil)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	}
+}
+
+func (app *application) deleteMovieHandler(w http.ResponseWriter, r *http.Request) {
+	id, err := app.readIDParam(r)
+	if err != nil {
+		app.notFoundResponse(w, r)
+		return
+	}
+	err = app.repos.Movies.Delete(id)
+	if err != nil {
+		switch {
+		case errors.Is(err, data.ErrRecordNotFound):
+			app.notFoundResponse(w, r)
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+		return
+	}
+	err = app.writeJSON(w, http.StatusOK, envelope{"message": "movie successfully deleted"}, nil)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	}
+}
+
+func movieMapper(input MovieInput, movie *data.Movie) {
+	if input.Title != nil {
+		movie.Title = *input.Title
+	}
+	if input.Year != nil {
+		movie.Year = *input.Year
+	}
+	if input.Runtime != nil {
+		movie.Runtime = *input.Runtime
+	}
+	if input.Genres != nil {
+		movie.Genres = input.Genres
+	}
+}
+
+func ValidateMovie(v *validator.Validator, movie *data.Movie) bool {
+	v.Check(movie.Title != "", "title", "must not be empty")
+	v.Check(len(movie.Title) <= 500, "title", "must not be more than 500 chars long")
+
+	v.Check(movie.Year != 0, "year", "must be provided")
+	v.Check(movie.Year >= 1888, "year", "must be greater than 1888")
+	v.Check(movie.Year <= int32(time.Now().Year()), "year", "must not be in the future")
+
+	v.Check(movie.Runtime != 0, "runtime", "must be provided")
+	v.Check(movie.Runtime > 0, "runtime", "must be a positive integer")
+
+	v.Check(movie.Genres != nil, "genres", "must be provided")
+	v.Check(len(movie.Genres) >= 1, "genres", "must contain at least 1 genre")
+
+	v.Check(validator.Unique(movie.Genres), "genres", "must not contain duplicate values")
 	return v.Valid()
 }
