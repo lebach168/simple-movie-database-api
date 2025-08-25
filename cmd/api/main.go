@@ -1,8 +1,11 @@
 package main
 
 import (
+	"context"
+	"database/sql"
 	"flag"
 	"fmt"
+	_ "github.com/lib/pq"
 	"log"
 	"net/http"
 	"os"
@@ -14,6 +17,9 @@ const version = "1.0.0"
 type config struct {
 	port int
 	env  string
+	db   struct {
+		dsn string
+	}
 }
 
 type application struct {
@@ -26,10 +32,20 @@ func main() {
 	//default flag value
 	flag.IntVar(&cfg.port, "port", 8000, "API server port")
 	flag.StringVar(&cfg.env, "env", "development", "Environment (development|staging|production)")
+
+	flag.StringVar(&cfg.db.dsn, "db-dsn", "postgres://admin:123456@localhost/movie_api?sslmode=disable", "PostgreSQL DSN")
+
 	flag.Parse()
 
 	// Initialize a new logger which writes messages to the standard out stream,
 	logger := log.New(os.Stdout, "", log.Ldate|log.Ltime)
+
+	db, err := openDB(cfg)
+	if err != nil {
+		logger.Fatal(err)
+	}
+	logger.Printf("database connection pool established")
+	defer db.Close()
 
 	app := &application{
 		config: cfg,
@@ -38,7 +54,7 @@ func main() {
 
 	v1 := http.NewServeMux()
 	v1.Handle("/v1/", http.StripPrefix("/v1", app.routes()))
-	
+
 	server := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.port),
 		Handler:      v1,
@@ -47,7 +63,26 @@ func main() {
 		WriteTimeout: 30 * time.Second,
 	}
 	logger.Printf("Starting %s server on port %d:...", app.config.env, app.config.port)
-	err := server.ListenAndServe()
+	err = server.ListenAndServe()
 
 	logger.Fatal(err)
+}
+
+func openDB(cfg config) (*sql.DB, error) {
+	db, err := sql.Open("postgres", cfg.db.dsn)
+
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	err = db.PingContext(ctx)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return db, nil
+
 }
