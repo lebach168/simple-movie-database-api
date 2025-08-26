@@ -2,7 +2,7 @@ package main
 
 import "net/http"
 
-func (app *application) routes() *http.ServeMux {
+func (app *application) routes() http.Handler {
 	router := http.NewServeMux()
 
 	router.HandleFunc("GET /healthcheck", app.healthcheckHandler)
