@@ -4,13 +4,16 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"github.com/lib/pq"
+	"strings"
 	"time"
 )
 
 type MoviesRepoInterface interface {
 	Insert(movie *Movie) error
 	Get(id int64) (*Movie, error)
+	GetAll(title string, genres []string, filter Filter) ([]*Movie, Metadata, error)
 	Update(movie *Movie) error
 	Delete(id int64) error
 }
@@ -60,6 +63,55 @@ func (repo MoviesRepo) Get(id int64) (*Movie, error) {
 	}
 	return &movie, nil
 }
+
+func (repo MoviesRepo) GetAll(title string, genres []string, filter Filter) ([]*Movie, Metadata, error) {
+
+	sortBy := fmt.Sprintf("%s %s", strings.TrimPrefix(filter.Sort, "-"), filter.sortDirection())
+	limit := filter.limit()
+	offset := filter.offset()
+
+	query := fmt.Sprintf(`SELECT  count(*) OVER(),id, created_at, title, year, runtime, genres, version
+        FROM movies
+        WHERE (to_tsvector('simple',title) @@ plainto_tsquery('simple',$1) OR $1='')
+        	AND ((genres @> $2) OR $2='{}')
+        ORDER BY %s
+        LIMIT %v OFFSET %v`, sortBy, limit, offset)
+	// genres && $2 : nếu cần exists in
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	args := []interface{}{title, pq.Array(genres)}
+	rows, err := repo.DB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, Metadata{}, err
+	}
+	defer rows.Close()
+	movies := make([]*Movie, 0)
+	var totalRecords int
+	for rows.Next() {
+		var movie Movie
+		err := rows.Scan(
+			&totalRecords,
+			&movie.ID,
+			&movie.CreatedAt,
+			&movie.Title,
+			&movie.Year,
+			&movie.Runtime,
+			pq.Array(&movie.Genres),
+			&movie.Version,
+		)
+		if err != nil {
+			return nil, Metadata{}, err
+		}
+		movies = append(movies, &movie)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, Metadata{}, err
+	}
+	metadata := NewMetadata(totalRecords, filter.Page, filter.PageSize)
+	return movies, metadata, nil
+}
+
 func (repo MoviesRepo) Update(movie *Movie) error {
 	query := `
         UPDATE movies 

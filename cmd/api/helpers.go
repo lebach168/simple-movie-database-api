@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"simplewebapi.moviedb/internal/validator"
 	"strconv"
 	"strings"
 )
@@ -38,7 +40,42 @@ func (app *application) writeJSON(w http.ResponseWriter, status int, data envelo
 	w.Write(jsonData)
 	return nil
 }
+func readInt(qs url.Values, key string, defaultVal int, v *validator.Validator) int {
+	s := qs.Get(key)
+	if s == "" {
+		return defaultVal
+	}
 
+	i, err := strconv.Atoi(s)
+	if err != nil {
+		v.AddError(key, "must be an integer value")
+		return defaultVal
+	}
+	return i
+}
+func readString(qs url.Values, key string, defaultVal string) string {
+	s := qs.Get(key) //if len qs[key]>1 -> return only qs[0]
+	if s == "" {
+		return defaultVal
+	}
+	return s
+}
+func readCSV(qs url.Values, key string, defaultVal []string) []string {
+	csv := qs.Get(key)
+	if csv == "" {
+		return defaultVal
+	}
+	return strings.Split(csv, ",")
+}
+func readListString(qs url.Values, key string, defaultVal []string) []string {
+	ls := qs[key]
+	if len(ls) == 0 {
+		return defaultVal
+	}
+	var res []string
+	copy(res, ls)
+	return res
+}
 func (app *application) readJSON(w http.ResponseWriter, r *http.Request, input interface{}) error {
 	maxBytes := 1_048_576
 	r.Body = http.MaxBytesReader(w, r.Body, int64(maxBytes))

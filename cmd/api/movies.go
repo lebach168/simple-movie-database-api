@@ -15,6 +15,11 @@ type MovieInput struct {
 	Runtime *data.Runtime `json:"runtime"`
 	Genres  []string      `json:"genres"`
 }
+type QueryInput struct {
+	Title  string
+	Genres []string
+	data.Filter
+}
 
 func (app *application) createMovieHandler(w http.ResponseWriter, r *http.Request) {
 
@@ -116,7 +121,7 @@ func (app *application) updateMovieHandler(w http.ResponseWriter, r *http.Reques
 		}
 		return
 	}
-	
+
 	err = app.writeJSON(w, http.StatusOK, envelope{"movie": movie}, nil)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
@@ -144,7 +149,39 @@ func (app *application) deleteMovieHandler(w http.ResponseWriter, r *http.Reques
 		app.serverErrorResponse(w, r, err)
 	}
 }
+func (app *application) listMovieHandler(w http.ResponseWriter, r *http.Request) {
+	qs := r.URL.Query() // query string: map[string] []string
 
+	var input QueryInput
+	v := validator.New()
+	input.Title = readString(qs, "title", "")
+	input.Genres = readCSV(qs, "genres", []string{})
+
+	input.Page = readInt(qs, "page", 1, v)
+	input.PageSize = readInt(qs, "page_size", 20, v)
+	input.Sort = readString(qs, "sort", "id")
+
+	sortFields := []string{"id", "title", "year", "runtime", "-id", "-title", "-year", "-runtime"}
+	v.Check(input.Page > 0, "page", "must be greater than zero")
+	v.Check(input.PageSize > 0, "page_size", "must be greater than zero")
+	v.Check(input.PageSize <= 100, "page_size", "must be a maximum of 100")
+	v.Check(validator.In(input.Sort, sortFields...), "sort", fmt.Sprintf("invalid sort %s field", input.Sort))
+
+	if !v.Valid() {
+		app.failedValidationResponse(w, r, v.Errors)
+		return
+	}
+	movies, metadata, err := app.repos.Movies.GetAll(input.Title, input.Genres, input.Filter)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+	err = app.writeJSON(w, http.StatusOK, envelope{"metadata": metadata, "movies": movies}, nil)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	}
+
+}
 func movieMapper(input MovieInput, movie *data.Movie) {
 	if input.Title != nil {
 		movie.Title = *input.Title
