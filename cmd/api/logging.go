@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 )
@@ -23,6 +24,6 @@ func (app *application) LoggingHTTPHandler(next http.Handler) http.Handler {
 			statusCode:     http.StatusOK,
 		}
 		next.ServeHTTP(writer, r)
-		app.logger.Info("", writer.statusCode, r.Method, r.URL.Path, time.Since(start))
+		app.logger.Info(fmt.Sprintf("%d %s %s %s", writer.statusCode, r.Method, r.URL.Path, time.Since(start)))
 	})
 }

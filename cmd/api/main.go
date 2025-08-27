@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"simplewebapi.moviedb/internal/data"
+	"sync"
 	"time"
 )
 
@@ -33,6 +34,7 @@ type application struct {
 	config config
 	logger *slog.Logger
 	repos  data.Repo
+	wg     sync.WaitGroup
 }
 
 func main() {
@@ -69,8 +71,10 @@ func main() {
 	}
 
 	err = app.serve()
+	if err != nil {
+		logger.Error(err.Error())
+	}
 
-	logger.Error(err.Error())
 }
 
 func openDB(cfg config) (*sql.DB, error) {

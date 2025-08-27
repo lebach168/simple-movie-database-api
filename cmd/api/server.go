@@ -37,13 +37,21 @@ func (app *application) serve() error {
 
 		signal := <-quit
 
-		app.LogInfo("Shutting down server\n", "signal: ", signal.String())
+		app.logger.Info("Shutting down server\n", "signal: ", signal.String())
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		shutdownError <- server.Shutdown(ctx)
+		err := server.Shutdown(ctx)
+		if err != nil {
+			shutdownError <- err
+		}
+
+		app.logger.Info("Completing background tasks...")
+
+		app.wg.Wait()
+		shutdownError <- nil
 	}()
 
-	app.LogInfof("Starting %s server on port %d:...", app.config.env, app.config.port)
+	app.logger.Info(fmt.Sprintf("Starting %s server on port %d:...", app.config.env, app.config.port))
 
 	err := server.ListenAndServe()
 	if !errors.Is(err, http.ErrServerClosed) {
@@ -54,6 +62,6 @@ func (app *application) serve() error {
 	if err != nil {
 		return err
 	}
-	app.LogInfo("Server exited")
+	app.logger.Info("Server exited")
 	return nil
 }

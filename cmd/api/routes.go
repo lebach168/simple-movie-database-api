@@ -13,5 +13,7 @@ func (app *application) routes() http.Handler {
 	router.HandleFunc("PATCH /movies/{id}", app.updateMovieHandler)
 	router.HandleFunc("DELETE /movies/{id}", app.deleteMovieHandler)
 
+	router.HandleFunc("POST /users", app.registerUserHandler)
+
 	return router
 }

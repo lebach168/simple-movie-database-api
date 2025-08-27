@@ -31,15 +31,15 @@ func (app *application) createMovieHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	var movie *data.Movie
-	movieMapper(input, movie)
+	var movie data.Movie
+	movieMapper(input, &movie)
 	v := validator.New()
 
-	if !data.ValidateMovie(v, movie) {
+	if !data.ValidateMovie(v, &movie) {
 		app.failedValidationResponse(w, r, v.Errors)
 		return
 	}
-	err = app.repos.Movies.Insert(movie)
+	err = app.repos.Movies.Insert(&movie)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
@@ -182,6 +182,7 @@ func (app *application) listMovieHandler(w http.ResponseWriter, r *http.Request)
 
 }
 func movieMapper(input MovieInput, movie *data.Movie) {
+
 	if input.Title != nil {
 		movie.Title = *input.Title
 	}

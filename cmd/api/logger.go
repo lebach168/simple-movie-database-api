@@ -37,9 +37,3 @@ func NewLogger() *slog.Logger {
 	}
 	return slog.New(h)
 }
-func (app *application) LogInfof(pattern string, args ...any) {
-	app.logger.Info(fmt.Sprintf(pattern, args...))
-}
-func (app *application) LogInfo(args ...any) {
-	app.logger.Info(fmt.Sprint(args...))
-}

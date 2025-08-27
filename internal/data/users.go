@@ -26,12 +26,13 @@ type password struct {
 	hash      []byte
 }
 
-func (p *password) Hash(raw string) error {
+func (p *password) Set(raw string) error {
 	hashed, err := bcrypt.GenerateFromPassword([]byte(raw), 11)
 	if err != nil {
 		return err
 	}
-	*p.plaintext = raw
+
+	p.plaintext = &raw
 	p.hash = hashed
 	return nil
 }

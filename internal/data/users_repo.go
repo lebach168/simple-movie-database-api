@@ -20,14 +20,25 @@ type UsersRepo struct {
 func (repo UsersRepo) Insert(user *User) error {
 	query := `INSERT INTO users (name, email, password_hash)
 			VALUES ($1,$2,$3)
-			RETURNING id, creeated_at,activated,version`
+			RETURNING id, created_at,activated,version`
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	args := []interface{}{user.Name, user.Email, user.Password.hash}
 
-	return repo.DB.QueryRowContext(ctx, query, args...).Scan(&user.ID, &user.CreatedAt, &user.Activated, &user.Version)
+	err := repo.DB.QueryRowContext(ctx, query, args...).Scan(&user.ID, &user.CreatedAt, &user.Activated, &user.Version)
+
+	if err != nil {
+		switch {
+		case err.Error() == `pq: duplicate key value violates unique constraint "users_email_key"`:
+			return ErrDuplicateEmail
+		default:
+			return err
+		}
+
+	}
+	return nil
 }
 
 func (repo UsersRepo) GetByEmail(email string) (*User, error) {
