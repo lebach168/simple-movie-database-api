@@ -25,14 +25,23 @@ func (repo MoviesRepo) Insert(movie *Movie) error {
 	query := `
 		INSERT INTO movies (title,year,runtime,genres)
 		VALUES ($1,$2,$3,$4)
-		RETURNING id,created_at, version`
+		RETURNING id,created_at,version`
 
 	args := []interface{}{movie.Title, movie.Year, movie.Runtime, pq.Array(movie.Genres)}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	return repo.DB.QueryRowContext(ctx, query, args...).Scan(&movie.ID, &movie.CreatedAt, &movie.Version)
+	err := repo.DB.QueryRowContext(ctx, query, args...).Scan(&movie.ID, &movie.CreatedAt, &movie.Version)
+	if err != nil {
+		switch {
+		case err.Error() == `pq: duplicate key value violates unique constraint "users_email_key"`:
+			return ErrDuplicateEmail
+		default:
+			return err
+		}
+	}
+	return nil
 }
 func (repo MoviesRepo) Get(id int64) (*Movie, error) {
 	if id <= 0 {

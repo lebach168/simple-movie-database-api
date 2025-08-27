@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"simplewebapi.moviedb/internal/data"
 	"simplewebapi.moviedb/internal/validator"
-	"time"
 )
 
 type MovieInput struct {
@@ -36,7 +35,7 @@ func (app *application) createMovieHandler(w http.ResponseWriter, r *http.Reques
 	movieMapper(input, movie)
 	v := validator.New()
 
-	if !ValidateMovie(v, movie) {
+	if !data.ValidateMovie(v, movie) {
 		app.failedValidationResponse(w, r, v.Errors)
 		return
 	}
@@ -106,7 +105,7 @@ func (app *application) updateMovieHandler(w http.ResponseWriter, r *http.Reques
 	movieMapper(input, movie)
 	v := validator.New()
 
-	if !ValidateMovie(v, movie) {
+	if !data.ValidateMovie(v, movie) {
 		app.failedValidationResponse(w, r, v.Errors)
 		return
 	}
@@ -195,22 +194,4 @@ func movieMapper(input MovieInput, movie *data.Movie) {
 	if input.Genres != nil {
 		movie.Genres = input.Genres
 	}
-}
-
-func ValidateMovie(v *validator.Validator, movie *data.Movie) bool {
-	v.Check(movie.Title != "", "title", "must not be empty")
-	v.Check(len(movie.Title) <= 500, "title", "must not be more than 500 chars long")
-
-	v.Check(movie.Year != 0, "year", "must be provided")
-	v.Check(movie.Year >= 1888, "year", "must be greater than 1888")
-	v.Check(movie.Year <= int32(time.Now().Year()), "year", "must not be in the future")
-
-	v.Check(movie.Runtime != 0, "runtime", "must be provided")
-	v.Check(movie.Runtime > 0, "runtime", "must be a positive integer")
-
-	v.Check(movie.Genres != nil, "genres", "must be provided")
-	v.Check(len(movie.Genres) >= 1, "genres", "must contain at least 1 genre")
-
-	v.Check(validator.Unique(movie.Genres), "genres", "must not contain duplicate values")
-	return v.Valid()
 }
