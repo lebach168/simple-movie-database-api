@@ -2,6 +2,7 @@ package data
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"errors"
 	"time"
@@ -11,6 +12,7 @@ type UsersRepoInterface interface {
 	Insert(user *User) error
 	GetByEmail(email string) (*User, error)
 	Update(user *User) error
+	GetForToken(scope string, token string) (*User, error)
 }
 
 type UsersRepo struct {
@@ -93,4 +95,37 @@ func (repo UsersRepo) Update(user *User) error {
 		}
 	}
 	return nil
+}
+
+func (repo UsersRepo) GetForToken(scope string, token string) (*User, error) {
+	query := `SELECT users.id,users.created_at,users.name,users.email,users.password_hash, users.activated, 
+users.version 
+			FROM users INNER JOIN tokens on users.id = tokens.user_id
+    		WHERE tokens.scope = $1 AND tokens.hash = $2 AND tokens.expiry > $3`
+	hash := sha256.Sum256([]byte(token))
+
+	args := []interface{}{scope, hash[:], time.Now()}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var user User
+
+	err := repo.DB.QueryRowContext(ctx, query, args...).Scan(
+		&user.ID,
+		&user.CreatedAt,
+		&user.Name,
+		&user.Email,
+		&user.Password.hash,
+		&user.Activated,
+		&user.Version,
+	)
+	if err != nil {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return nil, ErrRecordNotFound
+		default:
+			return nil, err
+		}
+	}
+	return &user, nil
 }

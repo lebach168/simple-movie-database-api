@@ -4,19 +4,21 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base32"
+	"simplewebapi.moviedb/internal/validator"
 	"time"
 )
 
 type Token struct {
-	Plaintext string
-	Hash      []byte
-	UserID    int64
-	Expiry    time.Time
-	Scope     string
+	Plaintext string    `json:"token"`
+	Hash      []byte    `json:"-"`
+	UserID    int64     `json:"-"`
+	Expiry    time.Time `json:"expiry"`
+	Scope     string    `json:"-"`
 }
 
 const (
-	ScopeActivation = "activation"
+	ScopeActivation     = "activation"
+	ScopeAuthentication = "authentication"
 )
 
 func GenerateToken(userID int64, ttl time.Duration, scope string) (*Token, error) {
@@ -33,8 +35,12 @@ func GenerateToken(userID int64, ttl time.Duration, scope string) (*Token, error
 	}
 	token.Plaintext = base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(randText)
 
-	hash := sha256.Sum256(randText)
+	hash := sha256.Sum256([]byte(token.Plaintext))
 	token.Hash = hash[:]
 
 	return token, nil
+}
+func ValidateTokenPlaintext(v *validator.Validator, tokenPlaintext string) {
+	v.Check(tokenPlaintext != "", "token", "must be provided")
+	v.Check(len(tokenPlaintext) == 26, "token", "must be 26 bytes long")
 }
