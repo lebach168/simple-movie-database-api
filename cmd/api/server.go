@@ -16,9 +16,15 @@ func (app *application) serve() error {
 	v1 := http.NewServeMux()
 	v1.Handle("/v1/", http.StripPrefix("/v1", app.routes()))
 
+	allowedOrigins := []string{
+		"http://localhost:9000",
+	}
+	enableCORS := app.CORSMiddleware(allowedOrigins...)
+
 	middlewareChain := CreateChain(
 		app.LoggingHTTPHandler,
 		app.RecoverPanic,
+		enableCORS,
 		app.RateLimit,
 	)
 

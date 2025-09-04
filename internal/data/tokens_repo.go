@@ -34,6 +34,7 @@ func (repo TokensRepo) New(userID int64, ttl time.Duration, scope string) (*Toke
 	if err != nil {
 		return nil, err
 	}
+	err = repo.DeleteAllForUser(ScopeAuthentication, userID)
 	err = repo.Insert(token)
 
 	return token, err
